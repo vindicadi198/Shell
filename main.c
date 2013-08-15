@@ -4,26 +4,21 @@
 #include <stdlib.h>
 #include <unistd.h>
 int
-main(int argc,char *argv[])
+main(int argc,char *argv[],char **env)
 {
 	char *name=argv[0];
+	char cmd[100];
+	scanf("%s",cmd);
+	printf("The command entered is %s\n",cmd);
 	int cpid=fork();
 	if(cpid==0){
-		for(int i=0;i<10;i++)
-		{	
-			printf("The child pid is %d\n",getpid());
-			sleep(1);
-		}
-		printf("Child exiting\n");
+		execve(cmd,argv,env);
+		printf("Command finished\n");
 		exit(0);
 	}
-	else {
-		printf("Child created with pid %d\n",cpid);
-		printf("Waiting for child \n");
+	else{
 		wait(NULL);
-		printf("The child exiting\n");
-		exit(0);
-        
+		printf("Child finished executing command\n");
 	}
-	printf("parent exiting\n");
+	return 0;
 }
