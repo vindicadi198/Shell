@@ -3,27 +3,50 @@
 #include<stdlib.h>
 #include<string.h>
 #include<sys/wait.h>
+#include<signal.h>
+#include<setjmp.h>
+#include<readline/readline.h>
+#include<readline/history.h>
+#include<stdbool.h>
 #define STDIN	0
 #define STDOUT	1
 #define STDERR	2
+typedef struct{
+	pid_t pid;
+	bool isBackground;
+	bool isStopped;
+}pid_s;
 
+pid_s pid_arr[50];
+
+void signal_callback_handler(int signum)
+sigjmp_buf ctrlc_buf;
+void sigint_handler(int signum);
 
 int main(int argc,char * argv[],char **envp){
+
+	struct sigaction sigact;
+	sigact.sa_handler = signal_callback_handler;
+	sigemptyset(&sigact.sa_mask);
+	sigact.sa_flags=0;
+	sigaction(SIGINT, &sigact, NULL);
 	chdir("/Users/adityakamath/Documents/iith/github/assgn1");
 	int num_pipes=0;
 	char **tmp; 
 	int pid_arr[50];
 	int pid_arr_index=0;
-	char *line=(char*)malloc(4096*sizeof(char));
-	size_t size=4096;
+	char *line;
+	while ( sigsetjmp( ctrlc_buf, 1 ) != 0 );
 	while(1){
 		
-		printf("group1$");
+		//printf("group1$");
 		fflush(stdin);
 		fflush(stdout);
-		//gets(line);
-		int n=read(0,line,size);
-		if(n==0) continue;
+		line=readline("group1$");
+		if(line && *line)
+			add_history(line);
+		else
+			continue;
 		tmp= (char**)malloc(100*sizeof(char*));
 		char *tok=strtok(line,"|");
 		while(tok!=NULL){
@@ -75,13 +98,12 @@ int main(int argc,char * argv[],char **envp){
 				exit(0);
 			}
 			else{
-				pid_arr[pid_arr_index]=pid;
+				pid_arr[pid_arr_index].pid=pid;
+				pid_arr[pid_arr_index].isBackground=false;
+				pid_arr[pid_arr_ndex].isStopped=false;
 				pid_arr_index++;
 				if(i!=0){
-				//	if(i!=num_pipes)
-				//		close(fd[(2*i)]);
-				//	else
-						close(fd[(2*i-2)]);
+					close(fd[(2*i-2)]);
 					close(fd[(2*i-1)]);
 				}
 			}
@@ -98,5 +120,12 @@ int main(int argc,char * argv[],char **envp){
 		fflush(stdout);
 	}
 	return 0;
+}
+void signint_handler(int signum)
+{
+	for(int i=0;i<pid_arr_index;i++){
+		kill(SIGTERM,pid_arr[i]);
+	}
+	siglongjmp(ctrlc_buf, 1);
 }
 
