@@ -28,7 +28,6 @@ void sigint_handler(int signum); /* function to handle SIGINT events */
 void sigtstp_handler(int signum); /* function to handle SIGINT events */
 
 int main(int argc,char * argv[],char **envp){
-
 	init_sh(); /* initialise the shell and environment variables */
 	struct sigaction sigint; /* SIGINT handler setup */
 	sigint.sa_handler = sigint_handler;
@@ -67,12 +66,24 @@ int main(int argc,char * argv[],char **envp){
 		}
 		tmp[num_pipes]=NULL;
 		num_pipes--; /* number of pipes is one less than number of commands */
-		if(!strcmp(tmp[0],"cd")){ /* implement cd in shell */
-			if(tmp[1]==NULL){
-				chdir(getenv("HOME"));
-			}else{
-				chdir(tmp[1]);
+		if(strstr(tmp[0],"cd")){ /* implement cd in shell */
+			char **cd=(char **)malloc(50*sizeof(char*));
+			char *tok_cd=strtok(tmp[0]," "); /*tokenize the command */
+			int itr_cd=0;
+			while(tok_cd!=NULL){
+				cd[itr_cd]=tok_cd;
+				tok_cd=strtok(NULL," ");
+				itr_cd++;
 			}
+			cd[itr_cd]=NULL;
+			if(cd[1]==NULL){
+				if(chdir(getenv("HOME"))<0)
+					printf("%s\n",strerror(errno));
+			}else{
+				if(chdir(cd[1])<0)
+					printf("%s\n",strerror(errno));
+			}
+			free(cd);
 			free(tmp);
 			continue;
 		}else if(!strcmp(tmp[0],"bg")){ /*send stopped job to background */
@@ -137,7 +148,7 @@ int main(int argc,char * argv[],char **envp){
 				{
 				    if(strcmp(cmd[iterator],">") == 0)
 				    {
-				        filed = open(cmd[iterator+1], O_CREAT|O_RDWR|O_TRUNC);
+				        filed = open(cmd[iterator+1], O_CREAT|O_RDWR|O_TRUNC,0644);
 				        if(filed < 0){
 				            fprintf(stderr,"Error in opening file \n");
 				        }
@@ -148,7 +159,7 @@ int main(int argc,char * argv[],char **envp){
 				    }
 				    else if(strcmp(cmd[iterator],"<") == 0)
 				    {
-				        filed = open(cmd[iterator+1], O_RDWR);
+				        filed = open(cmd[iterator+1], O_RDWR,0644);
 				        if(filed < 0){
 				            fprintf(stderr,"Error in opening file \n");
 				        }
@@ -226,20 +237,20 @@ int main(int argc,char * argv[],char **envp){
 	}
 	return 0;
 }
-void init_sh()
-{
+void init_sh(){
 	chdir(getenv("HOME")); /* change directory to $HOME */
 	char path[200];
 	FILE* profile = fopen("profile","r");
-	fscanf(profile, "%s", path);	
-	setenv("PATH", path, 1); /* set PATH variable */
+	if(profile!=NULL){
+		fscanf(profile, "%s", path);	
+		setenv("PATH", path, 1); /* set PATH variable */
+	}
 	read_history(NULL); /* read previous history from file */
 }
-void freeHistory()
-{
+void freeHistory(){
 	int length = history_length;
 	HIST_ENTRY * toBeFreed;
-	for(int i = lenght-1;i >=0;i--){
+	for(int i = length-1;i >=0;i--){
 		toBeFreed = remove_history(i);
 		free(toBeFreed);
 	}	
