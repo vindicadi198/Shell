@@ -1,3 +1,4 @@
+#define _POSIX_SOURCE
 #include<stdio.h>
 #include<unistd.h>
 #include<stdlib.h>
@@ -5,68 +6,120 @@
 #include<sys/wait.h>
 #include<signal.h>
 #include<setjmp.h>
+#include<fcntl.h>
+#include<ctype.h>
 #include<readline/readline.h>
 #include<readline/history.h>
 #include<stdbool.h>
+#include<errno.h>
 #define STDIN	0
 #define STDOUT	1
 #define STDERR	2
-typedef struct{
-	pid_t pid;
-	bool isBackground;
-	bool isStopped;
-}pid_s;
 
-pid_s pid_arr[50];
+pid_t pid_arr[50]; /* Array to hold all running(foreground) pids */
+pid_t pid_arr_bg[50]; /* Array to hold all running(background) pids */
+int pid_arr_index=0,pid_arr_bg_index=0; /* index of last entry in corresponding
+										   array */
 
-void signal_callback_handler(int signum)
-sigjmp_buf ctrlc_buf;
-void sigint_handler(int signum);
+sigjmp_buf ctrlc_buf; /*control jump point after handling events */
+void init_sh();
+void freeHistory();
+void sigint_handler(int signum); /* function to handle SIGINT events */
+void sigtstp_handler(int signum); /* function to handle SIGINT events */
 
 int main(int argc,char * argv[],char **envp){
 
-	struct sigaction sigact;
-	sigact.sa_handler = signal_callback_handler;
-	sigemptyset(&sigact.sa_mask);
-	sigact.sa_flags=0;
-	sigaction(SIGINT, &sigact, NULL);
-	chdir("/Users/adityakamath/Documents/iith/github/assgn1");
-	int num_pipes=0;
-	char **tmp; 
-	int pid_arr[50];
-	int pid_arr_index=0;
-	char *line;
-	while ( sigsetjmp( ctrlc_buf, 1 ) != 0 );
+	init_sh(); /* initialise the shell and environment variables */
+	struct sigaction sigint; /* SIGINT handler setup */
+	sigint.sa_handler = sigint_handler;
+	sigemptyset(&sigint.sa_mask);
+	sigint.sa_flags=0;
+	sigaction(SIGINT, &sigint, NULL); /* register the signal handler */
+	struct sigaction sigtstp; /* SIGTSTP handler setup */
+	sigtstp.sa_handler = sigtstp_handler;
+	sigemptyset(&sigtstp.sa_mask);
+	sigtstp.sa_flags=0;
+	sigaction(SIGTSTP, &sigtstp, NULL); /* register the signal handler */
+	int num_pipes=0; /*variable to store the number of pipe symbols in a line*/
+	char **tmp; /* temporary string array for parsing */
+	char *line; /* string of entered command */
+	while ( sigsetjmp( ctrlc_buf, 1 ) != 0 ); /* return point of signal handler*/
 	while(1){
-		
-		//printf("group1$");
 		fflush(stdin);
 		fflush(stdout);
-		line=readline("group1$");
+		line=readline("group1$"); /* function to get entire line from console*/
 		if(line && *line)
-			add_history(line);
+			add_history(line); /* add entered command into history */
 		else
-			continue;
+			continue; /* prompt again if nothing entered */
+		int line_length=strlen(line);
+		bool notBackground=1; /* flag for background process */
+		if(line[line_length-1]=='&'){
+			notBackground=0;
+			line[line_length-1]='\0';
+		}
 		tmp= (char**)malloc(100*sizeof(char*));
-		char *tok=strtok(line,"|");
+		char *tok=strtok(line,"|"); /* tokenize string with | symbol */
 		while(tok!=NULL){
 			tmp[num_pipes]=tok;
 			tok=strtok(NULL,"|");
 			num_pipes++;
 		}
 		tmp[num_pipes]=NULL;
-		num_pipes--;
+		num_pipes--; /* number of pipes is one less than number of commands */
+		if(!strcmp(tmp[0],"cd")){ /* implement cd in shell */
+			if(tmp[1]==NULL){
+				chdir(getenv("HOME"));
+			}else{
+				chdir(tmp[1]);
+			}
+			free(tmp);
+			continue;
+		}else if(!strcmp(tmp[0],"bg")){ /*send stopped job to background */
+			if(pid_arr_bg_index!=0){	
+				for(int i=0;i<pid_arr_bg_index;i++){
+					kill(pid_arr_bg[i],SIGCONT);
+				}
+			}
+			pid_arr_bg_index=0;
+			free(tmp);
+			continue;
+		}else if(!strcmp(tmp[0],"fg")){ /*send stopped job to foreground */
+			if(pid_arr_bg_index!=0){
+				for(int i=0;i<pid_arr_bg_index;i++){
+					kill(pid_arr_bg[i],SIGCONT);
+					pid_arr[i]=pid_arr_bg[i];
+					pid_arr_index++;
+				}
+				int wait_ret=1;
+				for(int i=0;i<pid_arr_bg_index;i++){
+					wait_ret=waitpid(pid_arr_bg[i],0,0); /* wait for job*/
+				}
+				pid_arr_index=0;
+				pid_arr_bg_index=0;
+			}
+			free(tmp);
+			continue;
+		}else if(!strcmp(tmp[0],"exit")){ /* exit command exits the shell */
+			free(tmp);
+			write_history(NULL);
+			freeHistory();
+			exit(0);
+		}
 		int fd[2*num_pipes];
 		int i=0;
-		printf("num of pipes %d\n",num_pipes);
 		for(;i<num_pipes+1;i++){
 			if(i!=num_pipes)
-				pipe(fd+(2*i));
-			int pid=fork();
-			if(pid==0){
-				
+				pipe(fd+(2*i)); /* creating pipes for commands */
+			pid_t pid=fork(); /* fork new child */
+			if(pid==0){ /* child process */
+				if(notBackground==0)
+					if(setpgid(0,0)!=0){ /*change group ID to prevent SIGINT */
+						printf("setpgid error\n");
+						exit(0);
+					}
 				char **cmd=(char **)malloc(50*sizeof(char*));
-				char *tok1=strtok(tmp[i]," ");
+				char *tok1=strtok(tmp[i]," "); /*tokenize the command */
 				int itr=0;
 				while(tok1!=NULL){
 					cmd[itr]=tok1;
@@ -74,58 +127,133 @@ int main(int argc,char * argv[],char **envp){
 					itr++;
 				}
 				cmd[itr]=NULL;
-				int i1=(2*i)-2,i2=(2*i)-1,i3=(2*i),i4=(2*i)+1;
-				if(i==0){
+				int i1=(2*i)-2,i2=(2*i)-1,i3=(2*i),i4=(2*i)+1; /* indexes in 
+																  array for pipes */
+				int iterator = 0;
+				int flag = 0;
+				int filed;
+				for(iterator = 0; iterator < itr; iterator++) /*
+							handling file redirections */
+				{
+				    if(strcmp(cmd[iterator],">") == 0)
+				    {
+				        filed = open(cmd[iterator+1], O_CREAT|O_RDWR|O_TRUNC);
+				        if(filed < 0){
+				            fprintf(stderr,"Error in opening file \n");
+				        }
+				        fd[i3] = filed;
+				        fd[i4] = filed;
+				        cmd[iterator] = NULL;
+				        flag = 1;
+				    }
+				    else if(strcmp(cmd[iterator],"<") == 0)
+				    {
+				        filed = open(cmd[iterator+1], O_RDWR);
+				        if(filed < 0){
+				            fprintf(stderr,"Error in opening file \n");
+				        }
+				        cmd[iterator] = NULL;
+				        flag = 2;
+				    }
+				}
+				if(i==0){ /* for first command */
+					 if(flag == 2){ /* input file redcrection priority */
+				        dup2(filed,0);
+				        close(filed);
+				        flag = 0;
+				    }
+				    if(num_pipes > 0 || flag == 1){ /* output redirection */
+				        dup2(fd[i4],1);
+					    close(fd[i3]);
+					    close(fd[i4]);
+				    }
+				}else if(i!=num_pipes){ /* for all commands except last */
+					if(flag == 2){ /* input file redcrection priority */
+				        dup2(filed,0);
+				        close(filed);
+				        flag = 0;
+				    }else{
+				        dup2(fd[i1],0); /*input from previous pipe */
+				    }
 					dup2(fd[i4],1);
-					close(fd[i3]);
-					close(fd[i4]);
-				}else if(i!=num_pipes){
-					dup2(fd[i1],0);
-					dup2(fd[i4],1);
-
 					close(fd[i1]);
 					close(fd[i2]);
 					close(fd[i3]);
 					close(fd[i4]);
-				}else{
+				}else{ /* for last command */
 					close(0);
-					dup2(fd[i1],0);
+					if(flag == 1)	{ /* output redirection to file */
+						dup2(filed,1);
+						dup2(fd[i1],0);
+					}else if(flag == 2){ /* input redirection from file */
+						dup2(filed,0);
+						close(filed);
+						flag = 0;
+					}else{
+						dup2(fd[i1],0); /* input from pipe */
+					}
 					close(fd[i1]);
 					close(fd[i2]);
 				}
-				execvp(cmd[0],cmd);
-				fprintf(stderr,"error!!!%s %d\n",tmp[i],i);
+				execvp(cmd[0],cmd); /* execute command */
+				fprintf(stderr,"error!!!%s %s\n",tmp[i],strerror(errno));
 				exit(0);
 			}
 			else{
-				pid_arr[pid_arr_index].pid=pid;
-				pid_arr[pid_arr_index].isBackground=false;
-				pid_arr[pid_arr_ndex].isStopped=false;
-				pid_arr_index++;
+				if(notBackground){ /* put pid in correct array */
+					pid_arr[pid_arr_index]=pid;
+					pid_arr_index++;
+				}else{
+					pid_arr_bg[pid_arr_bg_index]=pid;
+					pid_arr_bg_index++;
+				}
 				if(i!=0){
-					close(fd[(2*i-2)]);
+					close(fd[(2*i-2)]); /* closing ends of the pipe in parent */
 					close(fd[(2*i-1)]);
 				}
 			}
 		}
-		while(1){
+		while(notBackground){ /* wait for all non-background processes */
 			int n=wait(NULL);
 			if(n==-1)
 				break;
 		}
-		pid_arr_index=0;
+		pid_arr_index=0; /*reset variables to default for next loop */
 		num_pipes=0;
-		free(tmp);
+		free(tmp); /* free temporary string memory */
 		fflush(stdin);
 		fflush(stdout);
 	}
 	return 0;
 }
-void signint_handler(int signum)
+void init_sh()
 {
-	for(int i=0;i<pid_arr_index;i++){
-		kill(SIGTERM,pid_arr[i]);
-	}
-	siglongjmp(ctrlc_buf, 1);
+	chdir(getenv("HOME")); /* change directory to $HOME */
+	char path[200];
+	FILE* profile = fopen("profile","r");
+	fscanf(profile, "%s", path);	
+	setenv("PATH", path, 1); /* set PATH variable */
+	read_history(NULL); /* read previous history from file */
 }
-
+void freeHistory()
+{
+	int length = history_length;
+	HIST_ENTRY * toBeFreed;
+	for(int i = lenght-1;i >=0;i--){
+		toBeFreed = remove_history(i);
+		free(toBeFreed);
+	}	
+}
+void sigint_handler(int signum){
+	for(int i=0;i<pid_arr_index;i++){
+		kill(SIGTERM,pid_arr[i]); /* send SIGTERM to all running processes */
+	}
+	siglongjmp(ctrlc_buf, 1); /* jump to set point in main */
+}
+void sigtstp_handler(int signum){
+	for(int i=0;i<pid_arr_index;i++){ /* move running process to background array */
+		pid_arr_bg[i]=pid_arr[i];
+		pid_arr_bg_index++;
+	}
+	pid_arr_index=0; /* reset foreground array index */
+}
