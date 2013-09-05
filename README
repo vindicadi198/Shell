@@ -29,6 +29,8 @@ To compile the shell:
 For compilation on Minix use:
 	make -f Makefile.minix
 
+To run the shell:
+	./group1
 
 There should be no compile errors and the executable "group1" should be
 generated in the same folder.
@@ -40,3 +42,9 @@ in the PATH variable and it will execute and display the output. Piping and file
 redirections and background processes are also supported.
 Pressing the up and down arrow keys you can go through the previously typed 
 commands and then execute them.
+
+Cons with Minix
+---------------
+The shell supports background processes. Since Minix does not have job control,
+setpgid function isnt available. Hence background processes may get killed upon
+sending signals to the foreground process.
