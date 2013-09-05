@@ -23,6 +23,7 @@ int pid_arr_index=0,pid_arr_bg_index=0; /* index of last entry in corresponding
 
 sigjmp_buf ctrlc_buf; /*control jump point after handling events */
 void init_sh();
+bool error_check(char *,int);
 void freeHistory();
 void sigint_handler(int signum); /* function to handle SIGINT events */
 void sigtstp_handler(int signum); /* function to handle SIGINT events */
@@ -52,6 +53,11 @@ int main(int argc,char * argv[],char **envp){
 		else
 			continue; /* prompt again if nothing entered */
 		int line_length=strlen(line);
+		bool syntax_err=error_check(line,line_length);
+		if(syntax_err==1){
+			printf("Error in entered command\n");
+			continue;
+		}
 		bool notBackground=1; /* flag for background process */
 		if(line[line_length-1]=='&'){
 			notBackground=0;
@@ -148,6 +154,10 @@ int main(int argc,char * argv[],char **envp){
 				{
 				    if(strcmp(cmd[iterator],">") == 0)
 				    {
+						if(cmd[iterator+1]==NULL){
+							printf("No file name specified. Aborting\n");
+							exit(1);
+						}
 				        filed = open(cmd[iterator+1], O_CREAT|O_RDWR|O_TRUNC,0644);
 				        if(filed < 0){
 				            fprintf(stderr,"Error in opening file \n");
@@ -159,7 +169,11 @@ int main(int argc,char * argv[],char **envp){
 				    }
 				    else if(strcmp(cmd[iterator],"<") == 0)
 				    {
-				        filed = open(cmd[iterator+1], O_RDWR,0644);
+				        if(cmd[iterator+1]==NULL){
+							printf("No file name specified. Aborting\n");
+							exit(1);
+						}
+						filed = open(cmd[iterator+1], O_RDWR,0644);
 				        if(filed < 0){
 				            fprintf(stderr,"Error in opening file \n");
 				        }
@@ -246,6 +260,13 @@ void init_sh(){
 		setenv("PATH", path, 1); /* set PATH variable */
 	}
 	read_history(NULL); /* read previous history from file */
+}
+bool error_check(char * str,int size){
+	for(int i=0;i<size;i++){
+		if(i!=size-1 && str[i]=='&')
+			return true;
+	}
+	return false;
 }
 void freeHistory(){
 	int length = history_length;
