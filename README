@@ -1,0 +1,42 @@
+Group Assignment 1
+------------------
+Group 1:
+	Aditya V Kamath
+	Pushkar Singh
+	Avin E M
+	Chowdari Sai Teja
+	Deva Akhil
+
+System Requirements
+-------------------
+The shell is completely POSIX compliant and should work on any POSIX OS.
+We have additionally used the GNU Readline library to get input from the console
+as well as keep track of history. This library is wiely available for all POSIX
+compliant OSes, and is usually installed by default(even Minx has it).
+
+To install readline library in Linux:
+	sudo apt-get install libreadline-dev
+
+To install readline library in Minix:
+	pkgin in readline-6.2
+
+To compile the shell:
+	
+	tar xvf group1.tar
+	cd group1
+	make
+
+For compilation on Minix use:
+	make -f Makefile.minix
+
+
+There should be no compile errors and the executable "group1" should be
+generated in the same folder.
+
+Usage
+-----
+Our shell works like any other shell,and you can type any command which exists
+in the PATH variable and it will execute and display the output. Piping and file
+redirections and background processes are also supported.
+Pressing the up and down arrow keys you can go through the previously typed 
+commands and then execute them.
