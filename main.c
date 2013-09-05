@@ -82,6 +82,12 @@ int main(int argc,char * argv[],char **envp){
 				itr_cd++;
 			}
 			cd[itr_cd]=NULL;
+			if(cd[2]!=NULL){
+				printf("Too many arguments to cd\n");
+				free(cd);
+				free(tmp);
+				continue;
+			}
 			if(cd[1]==NULL){
 				if(chdir(getenv("HOME"))<0)
 					printf("%s\n",strerror(errno));
