@@ -130,11 +130,13 @@ int main(int argc,char * argv[],char **envp){
 				pipe(fd+(2*i)); /* creating pipes for commands */
 			pid_t pid=fork(); /* fork new child */
 			if(pid==0){ /* child process */
+#ifndef __minix	/* minix does not support setpgid */ 
 				if(notBackground==0)
 					if(setpgid(0,0)!=0){ /*change group ID to prevent SIGINT */
 						printf("setpgid error\n");
 						exit(0);
 					}
+#endif
 				char **cmd=(char **)malloc(50*sizeof(char*));
 				char *tok1=strtok(tmp[i]," "); /*tokenize the command */
 				int itr=0;

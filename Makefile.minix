@@ -1,10 +1,10 @@
-CFLAGS = -g -std=c99 -Wall
+CFLAGS = -std=c99
 LDFLAGS = -L/usr/pkg/lib -lreadline -lncurses
 TARGET = group1
 %: all
 
 all: main.c
-	$(CC) $(CFLAGS) $< -o $(TARGET) $(LDFLAGS)
+	$(CC) $(CFLAGS) main.c -o $(TARGET) $(LDFLAGS)
 
 clean:
 	rm -f $(TARGET)
