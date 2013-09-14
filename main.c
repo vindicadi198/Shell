@@ -82,22 +82,26 @@ int main(int argc,char * argv[],char **envp){
 				itr_cd++;
 			}
 			cd[itr_cd]=NULL;
-			if(cd[2]!=NULL){
-				printf("Too many arguments to cd\n");
+			if(!strcmp(cd[0],"cd")){
+				if(cd[2]!=NULL){
+					printf("Too many arguments to cd\n");
+					free(cd);
+					free(tmp);
+					continue;
+				}
+				if(cd[1]==NULL){
+					if(chdir(getenv("HOME"))<0)
+						printf("%s\n",strerror(errno));
+				}else{
+					if(chdir(cd[1])<0)
+						printf("%s\n",strerror(errno));
+				}
 				free(cd);
 				free(tmp);
 				continue;
-			}
-			if(cd[1]==NULL){
-				if(chdir(getenv("HOME"))<0)
-					printf("%s\n",strerror(errno));
 			}else{
-				if(chdir(cd[1])<0)
-					printf("%s\n",strerror(errno));
+				free(cd);
 			}
-			free(cd);
-			free(tmp);
-			continue;
 		}else if(!strcmp(tmp[0],"bg")){ /*send stopped job to background */
 			if(pid_arr_bg_index!=0){	
 				for(int i=0;i<pid_arr_bg_index;i++){
@@ -286,8 +290,9 @@ void freeHistory(){
 }
 void sigint_handler(int signum){
 	for(int i=0;i<pid_arr_index;i++){
-		kill(SIGTERM,pid_arr[i]); /* send SIGTERM to all running processes */
+		kill(pid_arr[i],SIGTERM); /* send SIGTERM to all running processes */
 	}
+	pid_arr_index=0; /* reset foreground array index */
 	siglongjmp(ctrlc_buf, 1); /* jump to set point in main */
 }
 void sigtstp_handler(int signum){
