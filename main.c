@@ -108,7 +108,6 @@ int main(int argc,char * argv[],char **envp){
 					kill(pid_arr_bg[i],SIGCONT);
 				}
 			}
-			pid_arr_bg_index=0;
 			free(tmp);
 			continue;
 		}else if(!strcmp(tmp[0],"fg")){ /*send stopped job to foreground */
@@ -118,12 +117,16 @@ int main(int argc,char * argv[],char **envp){
 					pid_arr[i]=pid_arr_bg[i];
 					pid_arr_index++;
 				}
-				int wait_ret=1;
-				for(int i=0;i<pid_arr_bg_index;i++){
-					wait_ret=waitpid(pid_arr_bg[i],0,0); /* wait for job*/
+				int wait_ret=1,stat_loc;
+				while(1){
+					wait_ret=wait(&stat_loc); /* wait for jobs */
+					if(wait_ret==-1)
+						break;
 				}
 				pid_arr_index=0;
-				pid_arr_bg_index=0;
+				if(!WIFSTOPPED(stat_loc))
+					pid_arr_bg_index=0; /* reset background array only if job 
+										   is not stopped */
 			}
 			free(tmp);
 			continue;
@@ -296,9 +299,14 @@ void sigint_handler(int signum){
 	siglongjmp(ctrlc_buf, 1); /* jump to set point in main */
 }
 void sigtstp_handler(int signum){
-	for(int i=0;i<pid_arr_index;i++){ /* move running process to background array */
-		pid_arr_bg[i]=pid_arr[i];
+	for(int i=0;i<pid_arr_index;i++){
+		kill(pid_arr[i],SIGTSTP);
+	}
+    int tmp=pid_arr_bg_index;
+	for(int i=tmp,j=0;i<pid_arr_index+tmp;i++,j++){ /* move running process to background array */
+		pid_arr_bg[i]=pid_arr[j];
 		pid_arr_bg_index++;
 	}
 	pid_arr_index=0; /* reset foreground array index */
+	siglongjmp(ctrlc_buf, 1); /* jump to set point in main */
 }
