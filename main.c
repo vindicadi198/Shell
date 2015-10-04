@@ -21,12 +21,17 @@ pid_t pid_arr_bg[50]; /* Array to hold all running(background) pids */
 int pid_arr_index=0,pid_arr_bg_index=0; /* index of last entry in corresponding
 										   array */
 
+char **alias_value;
+char **alias_key;
+int alias_index=0;
+
 sigjmp_buf ctrlc_buf; /*control jump point after handling events */
 void init_sh();
 bool error_check(char *,int);
 void freeHistory();
 void sigint_handler(int signum); /* function to handle SIGINT events */
 void sigtstp_handler(int signum); /* function to handle SIGINT events */
+int alias_check(char *cmd);
 
 int main(int argc,char * argv[],char **envp){
 	init_sh(); /* initialise the shell and environment variables */
@@ -57,6 +62,11 @@ int main(int argc,char * argv[],char **envp){
 		if(syntax_err==1){
 			printf("Error in entered command\n");
 			continue;
+		}
+		int alias_found=alias_check(line);
+		if(alias_found!=-1){
+			line=alias_value[alias_found];
+			printf("alias value is %s\n",alias_value[alias_found]);
 		}
 		bool notBackground=1; /* flag for background process */
 		if(line[line_length-1]=='&'){
@@ -268,13 +278,47 @@ int main(int argc,char * argv[],char **envp){
 }
 void init_sh(){
 	chdir(getenv("HOME")); /* change directory to $HOME */
-	char path[200];
-	FILE* profile = fopen("profile","r");
+	char *string=(char*)malloc(300*sizeof(char));
+	size_t bytes=300;
+	alias_key=(char**)malloc(30*sizeof(char*));
+	alias_value=(char**)malloc(30*sizeof(char*));
+	FILE* profile = fopen("/Users/adityakamath/profile","r");
 	if(profile!=NULL){
-		fscanf(profile, "%s", path);	
-		setenv("PATH", path, 1); /* set PATH variable */
+		while(fgets(string,bytes,profile)!=NULL){
+			if(strstr(string,"alias")){
+				char *tmp=strtok(string,":");
+				int flag =1;
+				while(tmp!=NULL){
+					tmp=strtok(NULL,":");
+				//	printf("string is %s\n",tmp);
+					if(flag==1){
+						alias_key[alias_index]=(char*)malloc(400*sizeof(char));
+						strcpy(alias_key[alias_index],tmp);
+						flag=2;
+					}else if(flag==2){
+						alias_value[alias_index]=(char*)malloc(400*sizeof(char));
+						strcpy(alias_value[alias_index],tmp);
+						break;
+					}
+				}
+				alias_index++;
+			}else{
+				fscanf(profile, "%s", string);	
+				setenv("PATH", string, 1); /* set PATH variable */
+			}
+		}
 	}
+	//printf("number of alias = %d %s\n",alias_index,alias_key[0]);
 	read_history(NULL); /* read previous history from file */
+}
+int alias_check(char *cmd){
+	if(cmd==NULL)
+		return -1;
+	for(int i=0;i<alias_index;i++){
+		if(!strcmp(alias_key[i],cmd))
+			return i;
+	}
+	return -1;
 }
 bool error_check(char * str,int size){
 	for(int i=0;i<size;i++){
